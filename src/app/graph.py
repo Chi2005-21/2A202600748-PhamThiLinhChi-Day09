@@ -7,8 +7,6 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from langgraph.graph import END, StateGraph
-
 from app.config import Settings
 from app.data_access import ShoppingDataStore
 from app.state import ShoppingState
@@ -168,30 +166,37 @@ def build_graph(assistant: ShoppingAssistant | None = None) -> Any:
     if assistant is None:
         assistant = ShoppingAssistant()
 
-    graph = StateGraph(ShoppingState)
-    graph.add_node("supervisor", lambda state: supervisor_node(state))
-    graph.add_node("worker_1_policy", lambda state: worker_1_policy_node(state, assistant))
-    graph.add_node("worker_2_data", lambda state: worker_2_data_node(state, assistant))
-    graph.add_node("worker_3_response", lambda state: worker_3_response_node(state))
+    return _CompiledShoppingGraph(assistant)
 
-    graph.set_entry_point("supervisor")
-    graph.add_conditional_edges(
-        "supervisor",
-        _after_supervisor,
-        {
-            "policy": "worker_1_policy",
-            "data": "worker_2_data",
-            "response": "worker_3_response",
-        },
-    )
-    graph.add_conditional_edges(
-        "worker_1_policy",
-        _after_policy,
-        {"data": "worker_2_data", "response": "worker_3_response"},
-    )
-    graph.add_edge("worker_2_data", "worker_3_response")
-    graph.add_edge("worker_3_response", END)
-    return graph.compile()
+
+class _CompiledShoppingGraph:
+    def __init__(self, assistant: ShoppingAssistant) -> None:
+        self.assistant = assistant
+
+    def invoke(self, state: ShoppingState) -> ShoppingState:
+        current: ShoppingState = dict(state)
+        current["trace"] = list(current.get("trace", []))
+
+        self._merge(current, supervisor_node(current))
+        route = current.get("route", {})
+
+        if route.get("status") != "clarification_needed":
+            if route.get("needs_policy"):
+                self._merge(current, worker_1_policy_node(current, self.assistant))
+            if route.get("needs_data"):
+                self._merge(current, worker_2_data_node(current, self.assistant))
+
+        self._merge(current, worker_3_response_node(current))
+        return current
+
+    @staticmethod
+    def _merge(state: ShoppingState, update: ShoppingState) -> None:
+        for key, value in update.items():
+            if key == "trace":
+                state.setdefault("trace", [])
+                state["trace"].extend(value)
+            else:
+                state[key] = value
 
 
 def supervisor_node(state: ShoppingState) -> ShoppingState:

@@ -9,3 +9,5 @@ __pycache__/
 src/.chroma/
 src/artifacts/
 .pytest_tmp/
+node_modules/
+logs/

@@ -8,9 +8,13 @@ from __future__ import annotations
 
 import os
 import pytest
-import requests
-from dotenv import load_dotenv
 import json
+
+try:
+    from dotenv import load_dotenv
+except ModuleNotFoundError:
+    def load_dotenv(*_args, **_kwargs):
+        return False
 
 load_dotenv()
 
@@ -23,6 +27,8 @@ def _require_external_smoke(provider_name: str):
 @pytest.mark.external
 def test_jina_reranker_api_smoke():
     _require_external_smoke("Jina")
+    import requests
+
     api_key = os.getenv("JINA_API_KEY")
     if not api_key:
         pytest.skip("JINA_API_KEY is not configured")

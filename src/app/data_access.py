@@ -5,7 +5,11 @@ from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
-from langchain_core.tools import tool
+try:
+    from langchain_core.tools import tool
+except ModuleNotFoundError:
+    def tool(func):
+        return func
 
 
 class ShoppingDataStore:
